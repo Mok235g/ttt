@@ -1,5 +1,8 @@
-from flask import Flask, request, jsonify
-import requests
+from flask import Flask, request
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import time
+import re
 
 app = Flask(__name__)
 
@@ -8,29 +11,72 @@ def api():
     try:
         link_topup = request.args.get('url')  # Get the 'url' parameter from the query
 
-        postData = {
-            'do': 'confirm',
-            'url': link_topup
-        }
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Run browser in headless mode
 
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows 98; Win 9x 4.90) AppleWebKit/5332 (KHTML, like Gecko) Chrome/36.0.870.0 Mobile Safari/5332',
-            'Host': 'www.arcshop.in.th',
-        'Cookie': 'arcshop=7bkpbngo1p0qk5mi7nigs37nek8rntck; _gcl_au=1.1.1299685118.1692013478; _gid=GA1.3.1152518994.1692013479; cf_clearance=eIVAMaKxIm.j5Z8aE6fVfzjDM1Ry5rELAJrvo_yakk4-1692013482-0-1-8d136230.8eee76af.da123dd0-0.2.1692013482; twk_idm_key=it5BVBGwbQZuDXGGd0-Q1; arcshopaccount=kqODrMcgCDSKGtXPJlsxaooXiGaeyqfmWMhAEQzdHbAcdrjjtuIvwHvUNxpiVTTs; _ga_WPNMZDR72H=GS1.1.1692013478.1.1.1692013498.0.0.0; _ga=GA1.3.642151656.1692013479; _ga_30PLGWBTMP=GS1.3.1692013482.1.1.1692013499.43.0.0; TawkConnectionTime=0',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Origin': 'https://www.arcshop.in.th',
-        'Referer': 'https://www.arcshop.in.th/topup/truewalletGift'
-        }
+        with webdriver.Chrome(options=chrome_options) as driver:
+            driver.get('https://www.arcshop.in.th/topup/truewalletGift')
+            
+            # Delete the 'arcshop' cookie if it exists
+            if 'arcshop' in [cookie['name'] for cookie in driver.get_cookies()]:
+                driver.delete_cookie('arcshop')
+            
+            # Add the updated 'arcshop' cookie
+            arcshop_cookie = {
+                'name': 'arcshop',
+                'value': '7bkpbngo1p0qk5mi7nigs37nek8rntck',
+                'domain': 'www.arcshop.in.th'
+            }
+            driver.add_cookie(arcshop_cookie)
+            
+            # Delete the 'arcshopaccount' cookie if it exists
+            if 'arcshopaccount' in [cookie['name'] for cookie in driver.get_cookies()]:
+                driver.delete_cookie('arcshopaccount')
+            
+            # Add the updated 'arcshopaccount' cookie
+            arcshopaccount_cookie = {
+                'name': 'arcshopaccount',
+                'value': 'kqODrMcgCDSKGtXPJlsxaooXiGaeyqfmWMhAEQzdHbAcdrjjtuIvwHvUNxpiVTTs',
+                'domain': 'www.arcshop.in.th'
+            }
+            driver.add_cookie(arcshopaccount_cookie)
+            
+            driver.get('https://www.arcshop.in.th/topup/truewalletGift')
+            input_element = driver.find_element("xpath", "/html/body/div[2]/div/div[2]/form/div[2]/div[1]/input")
+            input_element.send_keys(link_topup)
 
-        # Make an HTTP POST request
-        with requests.Session() as session:
-          response = session.post('https://www.arcshop.in.th/action/topup/truewalletGift', data=postData, headers=headers)
+            result = driver.find_element("xpath", "/html/body/div[2]/div/div[2]/form/div[2]/div[1]/div")
+            result.click()
+            time.sleep(1)
+            print(result.text)
+            if result.text == "ไม่พบข้อมูลลิงค์ซองของขวัญ, กรุณาตรวจสอบใหม่อีกครั้ง":
+                print("ลิ้งมึงไม่ถูก")
+                response = {
+                    "message": "ไม่พบข้อมูลลิงค์ซองของขวัญ"
+                }
+                return response
+            else:
+                numbers = re.findall(r'\d+', result.text)
 
-        # Send the HTML content received from the external server as the response
-        return response.text, response.status_code
+                if numbers:
+                    extracted_number = numbers[0]
+                    response = {
+                        "message": "พบข้อมูลลิ้งซองของขวัญ",
+                        "amount": extracted_number
+                    }
+                    return response
+                else:
+                    response = {
+                    "message": "ไม่พบข้อมูลลิงค์ซองของขวัญ"
+                    }
+                    return response
+            
+
+
+            
+            time.sleep(30)
     except Exception as error:
-        print('Requests Error:', error)
+        print('Selenium Error:', error)
         return 'An error occurred while fetching the data.', 500
 
 if __name__ == '__main__':
