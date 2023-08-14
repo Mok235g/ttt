@@ -24,7 +24,8 @@ def api():
         }
 
         # Make an HTTP POST request
-        response = requests.post('https://www.arcshop.in.th/action/topup/truewalletGift', data=postData, headers=headers)
+        with requests.Session() as session:
+          response = session.post('https://www.arcshop.in.th/action/topup/truewalletGift', data=postData, headers=headers)
 
         # Send the HTML content received from the external server as the response
         return response.text, response.status_code
